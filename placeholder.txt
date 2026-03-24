@@ -1,0 +1,10 @@
+Place character PNG/SVG assets here.
+Files:
+  - chinedu.png (male character, 200x280px)
+  - omotola.png (female character, 200x280px)
+  - room-food.jpg (food vendor room background)
+  - room-sportswear.jpg (sportswear shop background)
+  - room-palmwine.jpg (palm wine store background)
+
+Current implementation uses inline SVG characters generated in components/Character.js
+Replace with real illustrated assets for production.
