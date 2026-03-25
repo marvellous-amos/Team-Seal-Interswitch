@@ -44,6 +44,7 @@ export const sportswearScenarios = [
     difficulty: 4,
     category: "Customer Message",
     verifiedMerchant: true,
+    verificationQuery: "Neem",
     explanation:
       "Puma Africa does run local brand collaboration events. The @puma-africa.com email format is consistent with their regional operations. No-fee supply partnerships with retail space provided are legitimate brand-building opportunities. Verify through Puma's official Africa social channels.",
   },
@@ -64,6 +65,7 @@ export const sportswearScenarios = [
     label: "scam",
     difficulty: 4,
     category: "Payment Request",
+    verificationQuery: "Neem",
     explanation:
       "If you placed no order, this is fraud. If you did, your real clearing agent will have a signed contract with their official business account — not a personal account. Always verify clearance fees through your agent's known contact.",
   },

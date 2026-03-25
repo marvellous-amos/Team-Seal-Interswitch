@@ -21,9 +21,9 @@ const OVERLAY = {
   height: "100vh",
   zIndex: 40,
   display: "flex",
-  alignItems: "flex-end",
+  alignItems: "center", // Centers vertically
   justifyContent: "center",
-  padding: "0 16px 32px",
+  padding: "16px 16px",
   boxSizing: "border-box",
 };
 
