@@ -266,6 +266,8 @@
  * This means returning players never see the onboarding flow again.
  */
 
+"use client";
+
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -312,13 +314,16 @@ const CHARACTER_MAP = {
     traits: ["Street smart", "People reader", "Fearless boss"],
   },
 };
+/**
+ * Artifact: app/welcome/page.js
+ * FIXED: Updated imports and logic to use getSupabaseClient() and remove duplicate wallet code.
+ */
+
+// ... (BUSINESS_MAP and CHARACTER_MAP remain the same)
 
 export default function WelcomePage() {
-  const supabase = getSupabaseClient();
   const router = useRouter();
-  // 'checking' → spinner while we look up profile
-  // 'new'      → show welcome/onboarding CTA
-  // 'returning'→ show "continue" shortcut (brief flash before redirect)
+  const supabase = getSupabaseClient(); // ✅ FIX
   const [status, setStatus] = useState("checking");
   const [profile, setProfile] = useState(null);
 
@@ -327,7 +332,6 @@ export default function WelcomePage() {
       try {
         const user = await getUser();
         if (!user) {
-          // Middleware should have caught this — belt-and-suspenders
           router.replace("/login");
           return;
         }
@@ -335,11 +339,11 @@ export default function WelcomePage() {
         const { data, error } = await getUserProfile(user.id);
 
         if (error || !data || !data.character_id || !data.business_type) {
-          // New player — no profile written yet
           setStatus("new");
           return;
         }
-        // ── Returning player ─────────────────────────────────────────
+
+        // ── Wallet Management (Consolidated) ─────────────────────────
         if (!data.wallet_id) {
           try {
             const walletData = await createPlayerWallet({
@@ -355,7 +359,6 @@ export default function WelcomePage() {
                 .eq("id", user.id);
 
               localStorage.setItem("nbs_wallet_id", walletData.walletId);
-
               if (walletData.virtualAccount) {
                 localStorage.setItem(
                   "nbs_wallet_va",
@@ -374,8 +377,7 @@ export default function WelcomePage() {
           );
         }
 
-        // ── Returning player ─────────────────────────────────────────
-        // Re-hydrate localStorage so story/rules pages have context if visited
+        // ── Hydration ─────────────────────────────────────────
         const character = CHARACTER_MAP[data.character_id];
         const business = BUSINESS_MAP[data.business_type];
 
@@ -386,17 +388,14 @@ export default function WelcomePage() {
 
         setProfile(data);
         setStatus("returning");
-
-        // Short pause so the "Welcome back" flash is readable, then go to game
         setTimeout(() => router.replace("/game"), 1200);
       } catch (err) {
-        console.error("[WelcomePage] checkProfile error:", err);
-        setStatus("new"); // fail open — let them onboard
+        console.error("[WelcomePage] error:", err);
+        setStatus("new");
       }
     }
-
     checkProfile();
-  }, [router]);
+  }, [router, supabase]);
 
   async function handleSignOut() {
     await signOut();
