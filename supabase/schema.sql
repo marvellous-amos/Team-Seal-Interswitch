@@ -84,3 +84,10 @@ alter table public.user_answers add column if not exists level_at_answer integer
 alter table public.user_answers add column if not exists business_type text;
 
 alter table public.users add column if not exists wallet_id text;
+
+-- Add wallet_balance to track game currency manually
+ALTER TABLE public.users 
+ADD COLUMN IF NOT EXISTS wallet_balance INTEGER DEFAULT 0;
+
+-- Update RLS to allow users to see their own balance
+-- (Existing policies usually cover this if you select the whole row)

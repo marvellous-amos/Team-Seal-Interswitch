@@ -17,6 +17,7 @@ const PROTECTED = [
   "/story",
   "/rules",
   "/game",
+  "/profile",
 ];
 
 export async function proxy(request) {

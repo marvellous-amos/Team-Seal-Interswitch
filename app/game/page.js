@@ -7,7 +7,7 @@ import PhoneUI from "../../components/PhoneUI";
 import ReputationDisplay from "../../components/ReputationDisplay";
 import ExplanationModal from "../../components/ExplanationModal";
 import HeartShop from "../../components/HeartShop";
-import { getBalancedBatch } from "../../data/scenarios";
+import { getBalancedBatch, resetUsedScenarios } from "../../data/scenarios";
 import {
   getUser,
   saveGameSession,
@@ -20,9 +20,8 @@ const MAX_REPUTATION = 3;
 const POINTS_CORRECT = 10;
 const POINTS_STREAK_5 = 20;
 const POINTS_STREAK_10 = 50;
-const LEVEL_UP_STREAK = 8;
 const LEVEL_UP_ACCURACY = 0.85;
-const LEVEL_UP_SAMPLE = 20;
+const LEVEL_UP_SAMPLE = 20; // FIX: Strict requirement to prevent level skipping
 
 const LEVEL_LABELS = {
   2: {
@@ -44,8 +43,8 @@ const LEVEL_LABELS = {
 };
 
 const CHARACTER_BG = {
-  chinedu: { bg: "#F0E2C8", accent: "#E8820C" },
-  omotola: { bg: "#EDD5D9", accent: "#C94070" },
+  chinedu: { bg: "#F7F4EF", accent: "#E8820C" },
+  omotola: { bg: "#F7F4EF", accent: "#C94070" },
 };
 
 const GRADES = [
@@ -55,6 +54,7 @@ const GRADES = [
   { min: 45, grade: "C", label: "Learning", color: "#78716C" },
   { min: 0, grade: "F", label: "Try Again", color: "#E03131" },
 ];
+
 function getGrade(acc) {
   return GRADES.find((g) => acc >= g.min) || GRADES[4];
 }
@@ -63,8 +63,8 @@ export default function GamePage() {
   const router = useRouter();
   const answerStartRef = useRef(Date.now());
   const spreeTimerRef = useRef(null);
-  const reputationRef = useRef(MAX_REPUTATION); // mirrors reputation state, readable synchronously
-  const answerQueueRef = useRef([]); // batched answers — flushed every 5 or on game over
+  const reputationRef = useRef(MAX_REPUTATION);
+  const answerQueueRef = useRef([]);
 
   const [character, setCharacter] = useState(null);
   const [business, setBusiness] = useState(null);
@@ -79,6 +79,7 @@ export default function GamePage() {
   const [safeBlocked, setSafeBlocked] = useState(0);
   const [reputation, setReputation] = useState(MAX_REPUTATION);
   const [level, setLevel] = useState(1);
+  const [history, setHistory] = useState([]); // Array of {scenario_id, correct, level_at_answer}
   const [gameOver, setGameOver] = useState(false);
   const [spreeActive, setSpreeActive] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
@@ -98,46 +99,67 @@ export default function GamePage() {
       setCharacter(c);
       setBusiness(b);
       const user = await getUser();
-      if (user) setUserId(user.id);
+      if (user) {
+        setUserId(user.id);
+        // Step 4B Prep: Load their current level from DB
+        setLevel(user.current_level || 1);
+      }
       setScenarios(getBalancedBatch(b.id || "food_vendor", 1, 20));
+      resetUsedScenarios();
     }
     init();
     return () => {
       if (spreeTimerRef.current) clearTimeout(spreeTimerRef.current);
     };
   }, []);
-
   //  to be removed once we have a proper login flow and can test with real users
   async function handleSignOut() {
     await signOut();
     router.push("/login");
   }
 
-  const currentScenario = scenarios[currentIndex] || null;
-  const charBg = CHARACTER_BG[character?.id] || CHARACTER_BG.chinedu;
-
   const checkLevelUp = useCallback(
-    (str, ans, cor) => {
-      if (level >= 5) return false;
-      if (str >= LEVEL_UP_STREAK) return true;
-      if (ans >= LEVEL_UP_SAMPLE && cor / ans >= LEVEL_UP_ACCURACY) return true;
-      return false;
-    },
-    [level],
-  );
+    async (currentLevel, updatedHistory, currentScore) => {
+      const nextLevel = currentLevel + 1;
+      if (nextLevel > 5) return;
 
-  function loadMore(lvl) {
-    setScenarios((p) => [
-      ...p,
-      ...getBalancedBatch(business?.id || "food_vendor", lvl, 20),
-    ]);
-  }
+      // Filter based on the level they just played
+      const levelScenarios = updatedHistory.filter(
+        (h) => h.level_at_answer === currentLevel,
+      );
+
+      if (levelScenarios.length >= LEVEL_UP_SAMPLE) {
+        const correct = levelScenarios.filter((h) => h.correct).length;
+        const accuracy = correct / levelScenarios.length;
+
+        if (accuracy >= LEVEL_UP_ACCURACY) {
+          setLevel(nextLevel);
+          setMilestone({ level: nextLevel, ...LEVEL_LABELS[nextLevel] });
+          setSpreeActive(false);
+          setPhoneOpen(false);
+
+          // FIX: Sync level to Supabase immediately
+          if (userId) {
+            await updateUserStats(userId, {
+              score: currentScore,
+              level: nextLevel,
+              totalCorrect: 0,
+              totalWrong: 0,
+            });
+          }
+        }
+      }
+    },
+    [userId],
+  );
 
   async function handleAnswer(selected) {
     if (!currentScenario || answerDisabled) return;
     setAnswerDisabled(true);
     const rt = Date.now() - answerStartRef.current;
     const isCorrect = selected === currentScenario.label;
+
+    // Track stats
     const newAnswered = totalAnswered + 1;
     const newCorrect = isCorrect ? totalCorrect + 1 : totalCorrect;
     setTotalAnswered(newAnswered);
@@ -145,6 +167,17 @@ export default function GamePage() {
     setLastAnswer(selected);
     setLastWasCorrect(isCorrect);
 
+    // Track detailed history for leveling logic
+    const answerLog = {
+      scenario_id: currentScenario.id,
+      correct: isCorrect,
+      level_at_answer: level,
+      timestamp: new Date().toISOString(),
+    };
+    const updatedHistory = [...history, answerLog];
+    setHistory(updatedHistory);
+
+    let newScore = score;
     if (isCorrect) {
       if (selected === "scam") setScamsBlocked((p) => p + 1);
       const ns = streak + 1;
@@ -157,46 +190,16 @@ export default function GamePage() {
       } else if (ns === 5) {
         earned += POINTS_STREAK_5;
         msg = `+${earned} 🔥 STREAK!`;
-      } else if (ns > 10 && ns % 5 === 0) {
-        earned += POINTS_STREAK_5;
-        msg = `+${earned} 🔥`;
       }
-      setScore((s) => s + earned);
+
+      newScore += earned;
+      setScore(newScore);
       setReaction("correct");
       setScorePopup(msg);
       setTimeout(() => setScorePopup(null), 1600);
-      if (currentIndex >= scenarios.length - 4) loadMore(level);
 
-      if (checkLevelUp(ns, newAnswered, newCorrect)) {
-        const nl = Math.min(level + 1, 5);
-        setLevel(nl);
-        setStreak(0);
-        loadMore(nl);
-        setSpreeActive(false);
-        setPhoneOpen(false);
-        setTimeout(() => {
-          setReaction("idle");
-          setAnswerDisabled(false);
-          setCurrentIndex((p) => p + 1);
-          setMilestone({ level: nl, ...LEVEL_LABELS[nl] });
-        }, 800);
-        if (userId) {
-          // Push to queue and flush immediately on level-up (natural pause point)
-          answerQueueRef.current.push({
-            user_id: userId,
-            scenario_id: currentScenario.id,
-            selected_answer: selected,
-            correct: true,
-            response_time: rt,
-            level_at_answer: level,
-            business_type: business?.id,
-          });
-          batchSaveAnswers(answerQueueRef.current).then(() => {
-            answerQueueRef.current = [];
-          });
-        }
-        return;
-      }
+      // Check for level up immediately
+      await checkLevelUp(level, updatedHistory, newScore);
 
       setSpreeActive(true);
       spreeTimerRef.current = setTimeout(() => {
@@ -204,6 +207,12 @@ export default function GamePage() {
         setAnswerDisabled(false);
         setCurrentIndex((p) => p + 1);
         answerStartRef.current = Date.now();
+        if (currentIndex >= scenarios.length - 4) {
+          setScenarios((p) => [
+            ...p,
+            ...getBalancedBatch(business?.id, level, 20),
+          ]);
+        }
       }, 1200);
     } else {
       if (selected === "scam" && currentScenario.label === "safe")
@@ -212,13 +221,12 @@ export default function GamePage() {
       setReaction("wrong");
       setSpreeActive(false);
       setPhoneOpen(false);
-      // Compute synchronously so handleExplanationClose can read the true new value
       const newReputation = reputation - 1;
       setReputation(newReputation);
       reputationRef.current = newReputation;
       setShowExplanation(true);
     }
-    // Queue answer — flush to DB every 5 answers (reduces Supabase round-trips)
+
     if (userId) {
       answerQueueRef.current.push({
         user_id: userId,
@@ -237,44 +245,12 @@ export default function GamePage() {
     }
   }
 
-  function handlePhoneOpen() {
-    setPhoneOpen(true);
-    setSpreeActive(true);
-    answerStartRef.current = Date.now();
-  }
-
-  function handleExplanationClose() {
-    setShowExplanation(false);
-    setReaction("idle");
-    setAnswerDisabled(false);
-    // Use ref — state may not have settled yet when this runs
-    if (reputationRef.current <= 0) {
-      triggerGameOver();
-      return;
-    }
-    setCurrentIndex((p) => p + 1);
-    answerStartRef.current = Date.now();
-    if (currentIndex >= scenarios.length - 4) loadMore(level);
-  }
-
   async function triggerGameOver() {
     setGameOver(true);
     const acc =
       totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
-    localStorage.setItem(
-      "nbs_last_session",
-      JSON.stringify({
-        score,
-        accuracy: acc,
-        level,
-        scamsBlocked,
-        safeBlocked,
-        totalAnswered,
-      }),
-    );
     if (!userId) return;
 
-    // Flush any remaining queued answers before closing the session
     if (answerQueueRef.current.length > 0) {
       await batchSaveAnswers(answerQueueRef.current).catch(console.error);
       answerQueueRef.current = [];
@@ -290,7 +266,6 @@ export default function GamePage() {
       total_answered: totalAnswered,
     }).catch(console.error);
 
-    // updateUserStats now uses MAX logic internally — pass named fields
     await updateUserStats(userId, {
       score,
       level,
@@ -299,7 +274,26 @@ export default function GamePage() {
     }).catch(console.error);
   }
 
-  // ── Game Over ─────────────────────────────────────────────────
+  function handleExplanationClose() {
+    setShowExplanation(false);
+    setReaction("idle");
+    setAnswerDisabled(false);
+    if (reputationRef.current <= 0) {
+      triggerGameOver();
+      return;
+    }
+    setCurrentIndex((p) => p + 1);
+    answerStartRef.current = Date.now();
+    if (currentIndex >= scenarios.length - 4) {
+      setScenarios((p) => [...p, ...getBalancedBatch(business?.id, level, 20)]);
+    }
+  }
+
+  const currentScenario = scenarios[currentIndex] || null;
+  const charBg = CHARACTER_BG[character?.id] || CHARACTER_BG.chinedu;
+  const liveAcc =
+    totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 100;
+
   if (gameOver) {
     const acc =
       totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
@@ -320,7 +314,6 @@ export default function GamePage() {
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, delay: 0.15 }}
               className="text-7xl mb-3 inline-block"
             >
               {acc >= 70 ? "🏆" : "📉"}
@@ -331,13 +324,8 @@ export default function GamePage() {
             >
               {acc >= 70 ? "Business Saved!" : "YAHOO Corp Won!"}
             </h1>
-            <p className="text-ink-500 text-sm">
-              {acc >= 70
-                ? `${character?.name} protected their business!`
-                : `${character?.name}'s business took heavy damage.`}
-            </p>
           </div>
-          <div className="card p-5 mb-4">
+          <div className="card p-5 mb-4 bg-white rounded-3xl border-2 border-ink-300 shadow-card">
             <div className="flex items-center justify-between pb-4 mb-4 border-b-2 border-ink-200">
               <div>
                 <p className="text-xs font-black text-ink-500 uppercase tracking-widest">
@@ -368,7 +356,7 @@ export default function GamePage() {
                 },
                 {
                   label: "Level Reached",
-                  value: `${level}`,
+                  value: level,
                   icon: "📈",
                   color: "#1D4ED8",
                 },
@@ -378,23 +366,11 @@ export default function GamePage() {
                   icon: "🛡️",
                   color: "#2D9A4E",
                 },
-                {
-                  label: "Questions",
-                  value: totalAnswered,
-                  icon: "📊",
-                  color: "#78716C",
-                },
-                {
-                  label: "Safe Blocked",
-                  value: safeBlocked,
-                  icon: "⚠️",
-                  color: "#E03131",
-                },
               ].map((s) => (
                 <div key={s.label} className="bg-bg-sunken rounded-xl p-3">
                   <div className="text-lg mb-0.5">{s.icon}</div>
                   <div
-                    className="text-2xl font-black"
+                    className="text-2xl font-black text-ink-900"
                     style={{ fontFamily: "Nunito, sans-serif", color: s.color }}
                   >
                     {s.value}
@@ -404,172 +380,103 @@ export default function GamePage() {
               ))}
             </div>
           </div>
-          {safeBlocked > 0 && (
-            <div className="bg-danger-bg border-2 border-danger-border rounded-2xl p-4 mb-4">
-              <p className="text-danger-text text-xs font-bold mb-1">
-                ⚠ Real Messages Wrongly Blocked
-              </p>
-              <p className="text-danger-text/80 text-xs leading-relaxed">
-                You flagged {safeBlocked} real message
-                {safeBlocked > 1 ? "s" : ""} as scam.
-              </p>
-            </div>
-          )}
           <div className="grid grid-cols-2 gap-3">
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={() => {
-                setScore(0);
-                setStreak(0);
-                setTotalAnswered(0);
-                setTotalCorrect(0);
-                setScamsBlocked(0);
-                setSafeBlocked(0);
-                setReputation(MAX_REPUTATION);
-                setLevel(1);
-                setCurrentIndex(0);
-                setGameOver(false);
-                setReaction("idle");
-                setSpreeActive(false);
-                setPhoneOpen(false);
-                setScenarios(
-                  getBalancedBatch(business?.id || "food_vendor", 1, 20),
-                );
-              }}
-              className="btn-primary flex items-center justify-center gap-2 py-4"
+            <button
+              onClick={() => window.location.reload()}
+              className="btn-primary py-4"
             >
               🔄 Again
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={() => router.push("/welcome")}
-              className="btn-neutral flex items-center justify-center gap-2 py-4"
+            </button>
+            <button
+              onClick={() => router.push("/profile")}
+              className="btn-neutral py-4 shadow-btn-neutral border-2 border-ink-300"
             >
               🏠 Home
-            </motion.button>
+            </button>
           </div>
         </motion.div>
       </div>
     );
   }
 
-  const liveAcc =
-    totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 100;
-
-  // ── Main game — 100dvh, no overflow-hidden anywhere ────────────
-  // KEY: overflow-hidden is REMOVED from all parent divs.
-  // PhoneUI open state uses fixed positioning — it must not have
-  // any ancestor with overflow:hidden or transform, or fixed breaks.
-  // Solution: render open PhoneUI as a sibling at the root level.
   return (
-    <div className="h-[100dvh] flex flex-col" style={{ background: charBg.bg }}>
-      {/* Flag stripe */}
+    <div
+      className="h-[100dvh] flex flex-col relative overflow-hidden"
+      style={{ background: charBg.bg }}
+    >
       <div className="flex-none h-1.5 flex">
         <div className="flex-1 bg-brand" />
-        <div
-          className="flex-1 border-y border-ink-200"
-          style={{ background: charBg.bg }}
-        />
+        <div className="flex-1 border-y border-ink-200" />
         <div className="flex-1 bg-brand" />
       </div>
 
-      {/* HUD */}
-      <div
-        className="flex-none px-4 py-2.5"
-        style={{
-          background: "rgba(255,255,255,0.75)",
-          borderBottom: "2px solid #D6D3D1",
-        }}
-      >
+      <div className="flex-none px-4 py-3 bg-white/80 backdrop-blur-md border-b-2 border-ink-300">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <ReputationDisplay
             reputation={reputation}
             maxReputation={MAX_REPUTATION}
           />
           <div
-            className="font-black text-lg text-center"
+            className="font-black text-lg text-ink-900"
             style={{ fontFamily: "Nunito, sans-serif", color: charBg.accent }}
           >
             {score.toLocaleString()}pts
           </div>
           <div className="flex items-center gap-2">
-            {/* Shop button — only visible when affordable and not at full health */}
-            {score >= 70 && reputation < MAX_REPUTATION && !gameOver && (
+            {score >= 70 && reputation < MAX_REPUTATION && (
               <motion.button
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                whileTap={{ scale: 0.9 }}
                 onClick={() => setShowShop(true)}
-                style={{
-                  background: "#E8F5ED",
-                  border: "2px solid #A3D9B1",
-                  borderRadius: 12,
-                  padding: "4px 8px",
-                  cursor: "pointer",
-                  boxShadow: "0 2px 0 0 #A3D9B1",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
+                className="bg-brand-light border-2 border-brand/30 rounded-xl px-2 py-1 flex items-center gap-1 shadow-sm"
               >
-                <span style={{ fontSize: 14 }}>❤️</span>
-                <span
-                  style={{
-                    fontFamily: "Nunito, sans-serif",
-                    fontWeight: 900,
-                    fontSize: 11,
-                    color: "#1F6B36",
-                  }}
-                >
-                  +70
-                </span>
+                <span className="text-xs">❤️</span>
+                <span className="font-black text-[10px] text-brand">+70</span>
               </motion.button>
             )}
             <div className="text-right">
-              <div className="text-ink-700 text-xs font-bold">
-                {business?.emoji} {business?.name}
+              <div className="text-ink-700 text-[10px] font-black uppercase tracking-wider">
+                {business?.name}
               </div>
-              <div className="text-ink-400 text-[11px]">📈 Level {level}</div>
+              <div className="text-ink-400 text-[10px] font-bold">
+                LVL {level}
+              </div>
             </div>
           </div>
         </div>
-        <div
-          className="max-w-lg mx-auto mt-1.5 h-1.5 rounded-full overflow-hidden"
-          style={{ background: "#D6D3D1" }}
-        >
+        <div className="max-w-lg mx-auto mt-2 h-1.5 bg-ink-200 rounded-full overflow-hidden">
           <motion.div
             className="h-full rounded-full"
             style={{ background: charBg.accent }}
             animate={{ width: `${liveAcc}%` }}
-            transition={{ duration: 0.5 }}
           />
         </div>
       </div>
-
       <button
         onClick={handleSignOut}
         className="w-full text-ink-500 hover:text-ink-700 text-sm transition-colors py-2 font-medium"
       >
         Sign Out
       </button>
-      {/* Character area — flex-1, NO overflow:hidden */}
-      <div className="flex-1 flex flex-col items-center justify-center relative px-4">
+      <button
+        onClick={() => router.push("/profile")}
+        className="w-full text-ink-500 hover:text-ink-700 text-sm transition-colors py-2 font-medium"
+      >
+        Return to Profile
+      </button>
+
+      <div className="flex-1 flex flex-col items-center justify-center relative px-4 pt-12 pb-24">
         <AnimatePresence>
           {streak >= 3 && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.5 }}
-              className="absolute top-4 flex items-center gap-2 rounded-full px-4 py-1.5 border-2"
-              style={{
-                background: "rgba(232,130,12,0.12)",
-                borderColor: "rgba(232,130,12,0.35)",
-              }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 bg-gold-light border-2 border-gold-border rounded-full px-4 py-1 flex items-center gap-2"
             >
               <span>🔥</span>
               <span
-                className="font-black text-sm"
-                style={{ fontFamily: "Nunito, sans-serif", color: "#E8820C" }}
+                className="font-black text-xs text-gold-text uppercase"
+                style={{ fontFamily: "Nunito, sans-serif" }}
               >
                 {streak} streak
               </span>
@@ -577,87 +484,63 @@ export default function GamePage() {
           )}
         </AnimatePresence>
 
-        <AnimatePresence>
+        <div className="relative">
           {scorePopup && (
             <motion.div
-              key={scorePopup}
-              initial={{ opacity: 0, y: 10, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="absolute top-16 font-black px-4 py-1.5 rounded-2xl text-sm whitespace-nowrap text-white"
-              style={{
-                fontFamily: "Nunito, sans-serif",
-                background: "#2D9A4E",
-                boxShadow: "0 4px 0 0 #1F6B36",
-              }}
+              initial={{ opacity: 0, y: 0 }}
+              animate={{ opacity: 1, y: -40 }}
+              className="absolute -top-12 left-1/2 -translate-x-1/2 bg-brand text-white font-black px-4 py-1.5 rounded-2xl text-xs shadow-btn"
             >
               {scorePopup}
             </motion.div>
           )}
-        </AnimatePresence>
+          <Character characterData={character} reaction={reaction} />
+        </div>
 
-        {character && (
-          <Character
-            characterData={character}
-            reaction={reaction}
-            businessType={business?.id}
-          />
-        )}
-
-        <p className="text-ink-500 text-xs mt-3 text-center font-medium">
-          {totalAnswered === 0
-            ? "Tap the phone to check your first message 📱"
-            : spreeActive
-              ? "📨 Messages incoming…"
-              : "📱 New message — tap to read"}
+        <p className="text-ink-500 text-xs mt-6 font-bold uppercase tracking-widest">
+          {spreeActive
+            ? "📨 Messages incoming..."
+            : "📱 Tap phone to check messages"}
         </p>
 
-        {/* Closed phone button — only shown when phone is closed */}
         {!phoneOpen && (
-          <div className="mt-6">
+          <div className="mt-4">
             <PhoneUI
               scenario={currentScenario}
               isOpen={false}
-              spreeActive={spreeActive}
-              onOpen={handlePhoneOpen}
-              onAnswer={handleAnswer}
-              disabled={answerDisabled}
+              onOpen={() => {
+                setPhoneOpen(true);
+                setSpreeActive(true);
+                answerStartRef.current = Date.now();
+              }}
               notificationCount={currentScenario ? 1 : 0}
             />
           </div>
         )}
       </div>
 
-      {/* ── Open phone — at JSX root, no ancestor with overflow/transform ── */}
-      {/* This ensures fixed positioning works correctly */}
       {phoneOpen && (
         <PhoneUI
           scenario={currentScenario}
           isOpen={true}
           spreeActive={spreeActive}
-          onOpen={handlePhoneOpen}
           onAnswer={handleAnswer}
           disabled={answerDisabled}
-          notificationCount={0}
         />
       )}
 
-      {/* Explanation modal */}
       <AnimatePresence>
-        {showExplanation && lastAnswer && (
+        {showExplanation && (
           <ExplanationModal
             scenario={currentScenario}
             wasCorrect={lastWasCorrect}
             onContinue={handleExplanationClose}
           />
         )}
-      </AnimatePresence>
-
-      {/* Heart Shop */}
-      <AnimatePresence>
         {showShop && (
           <HeartShop
             score={score}
+            onClose={() => setShowShop(false)}
             onPurchase={({ newScore }) => {
               setScore(newScore);
               setReputation((r) => Math.min(r + 1, MAX_REPUTATION));
@@ -667,66 +550,72 @@ export default function GamePage() {
               );
               setShowShop(false);
             }}
-            onClose={() => setShowShop(false)}
           />
         )}
-      </AnimatePresence>
-
-      {/* Milestone interstitial */}
-      <AnimatePresence>
-        {milestone && (
-          <>
+        {/* {milestone && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-ink-900/60 backdrop-blur-sm">
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50"
-              style={{ background: "rgba(28,25,23,0.82)" }}
-            />
-            <div className="fixed inset-0 z-50 flex items-center justify-center px-6">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.85 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.85 }}
-                transition={{ type: "spring", stiffness: 260, damping: 22 }}
-                className="w-full max-w-sm rounded-3xl p-8 text-center border-2 border-brand"
-                style={{
-                  background: "#FFFFFF",
-                  boxShadow: "0 8px 40px rgba(45,154,78,0.2)",
-                }}
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-bg-surface rounded-[40px] p-10 text-center border-2 border-brand  shadow-lifted max-w-sm"
+            >
+              <div className="text-6xl mb-4">🔓</div>
+              <h2
+                className="text-3xl font-black text-ink-900 mb-2"
+                style={{ fontFamily: "Nunito, sans-serif" }}
               >
-                <div className="text-6xl mb-4">🔓</div>
-                <h2
-                  className="text-2xl font-black text-ink-900 mb-2"
-                  style={{ fontFamily: "Nunito, sans-serif" }}
-                >
-                  {milestone.title}
-                </h2>
-                <p className="text-ink-500 text-sm mb-6 leading-relaxed">
-                  {milestone.sub}
-                </p>
-                <div className="flex justify-center gap-2 mb-6">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-3 h-3 rounded-full"
-                      style={{
-                        background: i < milestone.level ? "#2D9A4E" : "#D6D3D1",
-                        transform:
-                          i < milestone.level ? "scale(1.15)" : "scale(1)",
-                      }}
-                    />
-                  ))}
-                </div>
-                <button
-                  onClick={() => setMilestone(null)}
-                  className="btn-primary w-full text-base"
-                >
-                  I'm Ready →
-                </button>
-              </motion.div>
-            </div>
-          </>
+                {milestone.title}
+              </h2>
+              <p className="text-ink-500 text-sm mb-8 leading-relaxed font-medium">
+                {milestone.sub}
+              </p>
+              <button
+                onClick={() => setMilestone(null)}
+                className="btn-primary w-full py-5 text-lg shadow-btn"
+              >
+                I'M READY →
+              </button>
+            </motion.div>
+          </div>
+        )} */}
+        {/* Milestone interstitial */}
+        {milestone && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-ink-900/60 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              className="bg-white relative z-[101]  p-10 text-center rounded shadow-lifted max-w-sm"
+              style={{ background: "#FFFFFF" }}
+            >
+              <div className="text-6xl mb-4">🔓</div>
+              <h2
+                className="text-3xl font-black text-ink-900 mb-2"
+                style={{ fontFamily: "Nunito, sans-serif" }}
+              >
+                {milestone.title}
+              </h2>
+              <p className="text-ink-500 text-sm mb-8 leading-relaxed font-medium">
+                {milestone.sub}
+              </p>
+
+              <div className="flex justify-center gap-2 mb-8">
+                {[1, 2, 3, 4, 5].map((lvl) => (
+                  <div
+                    key={lvl}
+                    className={`w-3 h-3 rounded-full ${lvl <= milestone.level ? "bg-brand scale-125" : "bg-ink-300"}`}
+                  />
+                ))}
+              </div>
+
+              <button
+                onClick={() => setMilestone(null)}
+                className="btn-primary w-full py-5 text-lg shadow-btn"
+              >
+                I'M READY →
+              </button>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

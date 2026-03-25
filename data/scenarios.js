@@ -251,32 +251,59 @@ export function shuffleScenarios(arr) {
   return out;
 }
 
+// ─── Session-level used-ID tracker ───────────────────────────────
+// Prevents the same scenario appearing twice in one game session.
+// Call resetUsedScenarios() on game start and play-again.
+let usedIds = new Set();
+
+export function resetUsedScenarios() {
+  usedIds = new Set();
+}
+
 /**
- * Get all scenarios valid for a given business + max difficulty
- * Always includes universal scenarios
+ * Get all scenarios valid for a given business and level.
+ * Difficulty is intentionally generous at low levels so business-specific
+ * scenarios (mostly diff 2-4) are not filtered out:
+ *   level 1 → up to difficulty 3
+ *   level 2 → up to difficulty 4
+ *   level 3+ → all difficulties (1-5)
  */
-export function getScenariosByBusiness(businessId, maxDifficulty = 5) {
+export function getScenariosByBusiness(businessId, level = 1) {
+  const maxDiff = level <= 1 ? 3 : level === 2 ? 4 : 5;
   return scenarios.filter(
-    (s) => s.businesses.includes(businessId) && s.difficulty <= maxDifficulty,
+    (s) => s.businesses.includes(businessId) && s.difficulty <= maxDiff,
   );
 }
 
 /**
- * Return a balanced batch (40–60% scam/safe) for a business + level
+ * Return a balanced batch (40-60% scam/safe) for a business + level.
+ * Excludes already-used scenario IDs to prevent repeats within a session.
+ * Resets used IDs automatically if pool is nearly exhausted.
  */
 export function getBalancedBatch(businessId, level, batchSize = 20) {
-  const pool = getScenariosByBusiness(businessId, Math.min(level + 1, 5));
+  let pool = getScenariosByBusiness(businessId, level).filter(
+    (s) => !usedIds.has(s.id),
+  );
+
+  // Pool exhausted — reset and reuse (still shuffled so order varies)
+  if (pool.length < batchSize) {
+    usedIds = new Set();
+    pool = getScenariosByBusiness(businessId, level);
+  }
+
   const scams = shuffleScenarios(pool.filter((s) => s.label === "scam"));
   const safes = shuffleScenarios(pool.filter((s) => s.label === "safe"));
 
   const scamCount = Math.round(batchSize * (0.4 + Math.random() * 0.2));
   const safeCount = batchSize - scamCount;
 
-  const batch = [
+  const batch = shuffleScenarios([
     ...scams.slice(0, Math.min(scamCount, scams.length)),
     ...safes.slice(0, Math.min(safeCount, safes.length)),
-  ];
+  ]);
 
-  if (batch.length < batchSize) return shuffleScenarios(pool);
-  return shuffleScenarios(batch);
+  // Mark batch as used
+  batch.forEach((s) => usedIds.add(s.id));
+
+  return batch;
 }
