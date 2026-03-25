@@ -1,7 +1,13 @@
 "use client";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import {
+  Search,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  Fingerprint,
+} from "lucide-react";
 import { verifyBusiness } from "../lib/interswitchClient";
 
 const CATEGORY_ICONS = {
@@ -34,7 +40,7 @@ const SENDERS = {
 };
 
 function getSender(cat) {
-  const list = SENDERS[cat] || ["Unknown"];
+  const list = SENDERS[cat] || ["Unknown Sender"];
   return list[Math.floor(Math.random() * list.length)];
 }
 
@@ -50,7 +56,6 @@ export default function ScenarioCard({ scenario, onAnswer, disabled }) {
     if (verifying || !scenario.verificationQuery) return;
     setVerifying(true);
 
-    // Call the Interswitch Marketplace Proxy
     const result = await verifyBusiness(scenario.verificationQuery);
 
     if (result.success && result.companies?.length > 0) {
@@ -65,12 +70,15 @@ export default function ScenarioCard({ scenario, onAnswer, disabled }) {
   }
 
   return (
-    <div style={{ background: "#FFFFFF" }}>
+    <div
+      className="rounded-3xl border-2 border-ink-300 shadow-card overflow-hidden"
+      style={{ background: "#FFFFFF" }}
+    >
       {/* Category accent line */}
-      <div className="h-1" style={{ background: style.border }} />
+      <div className="h-1.5" style={{ background: style.border }} />
 
       {/* Header */}
-      <div className="px-4 pt-3 pb-2 flex items-start justify-between gap-3">
+      <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
@@ -84,19 +92,19 @@ export default function ScenarioCard({ scenario, onAnswer, disabled }) {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span
-                className="font-black text-sm"
-                style={{ fontFamily: "Nunito, sans-serif", color: "#1C1917" }}
+                className="font-black text-sm text-ink-900"
+                style={{ fontFamily: "Nunito, sans-serif" }}
               >
                 {sender}
               </span>
               {(scenario.verifiedMerchant || scenario.misleadingBadge) && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-50 border border-blue-200 text-blue-700">
+                <span className="text-[9px] px-2 py-0.5 rounded-full font-black bg-blue-100 border border-blue-200 text-blue-700 uppercase tracking-tighter">
                   ✔ Verified
                 </span>
               )}
             </div>
             <span
-              className="text-[10px] px-2 py-0.5 rounded-full font-semibold mt-0.5 inline-block"
+              className="text-[9px] px-2 py-0.5 rounded-full font-black mt-1 inline-block uppercase tracking-wider"
               style={{
                 background: style.bg,
                 color: style.text,
@@ -107,90 +115,124 @@ export default function ScenarioCard({ scenario, onAnswer, disabled }) {
             </span>
           </div>
         </div>
-        <span className="text-[11px] text-ink-400 flex-shrink-0 mt-1">
-          Received just now
+        <span className="text-[10px] font-bold text-ink-400 flex-shrink-0 mt-1 uppercase">
+          Just Now
         </span>
       </div>
 
-      {/* Message */}
-      <div className="px-4 pb-3">
-        <p className="text-ink-900 text-sm leading-relaxed">{scenario.text}</p>
+      {/* Message Body */}
+      <div className="px-4 py-4">
+        <div className="bg-bg-base rounded-2xl p-4 border-y-1 border-ink-100 relative">
+          <p className="text-ink-900 text-[13px] leading-relaxed font-medium relative z-10">
+            {scenario.text}
+          </p>
+          <div className="absolute top-2 right-2 opacity-5 scale-150 rotate-12 z-0">
+            <Fingerprint size={48} />
+          </div>
+        </div>
 
-        {/* Difficulty */}
-        <div className="mt-2 flex items-center gap-1.5">
-          <div className="flex gap-0.5">
+        {/* Difficulty pips */}
+        <div className="mt-3 flex items-center gap-1.5 px-1">
+          <div className="flex gap-1">
             {Array.from({ length: 5 }).map((_, i) => (
               <div
                 key={i}
-                className="w-1.5 h-1.5 rounded-full"
+                className="w-2 h-2 rounded-full"
                 style={{
                   background: i < scenario.difficulty ? "#E8820C" : "#D6D3D1",
                 }}
               />
             ))}
           </div>
-          <span className="text-ink-400 text-[11px]">
-            Difficulty {scenario.difficulty}/5
+          <span className="text-ink-400 text-[10px] font-black uppercase tracking-widest">
+            Level {scenario.difficulty} Threat
           </span>
         </div>
       </div>
 
-      {/* Identity Tool Section — Triggered by scenarios with verificationQuery */}
+      {/* Redesigned Identity Tool Section */}
       {scenario.verificationQuery && (
         <div className="px-4 pb-4">
-          <div className="bg-bg-sunken border-2 border-ink-100 rounded-xl p-2.5 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Search size={14} className="text-ink-400" />
-              <span className="text-[10px] font-black text-ink-500 uppercase tracking-wider">
-                CAC Registry
-              </span>
-            </div>
+          <div className="bg-brand/5 border-x-1 border-dashed rounded-2xl p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1">
+                <p className="text-[10px] font-black text-ink-500 uppercase tracking-widest mb-1">
+                  Sender Identity
+                </p>
+                <p className="text-[11px] text-ink-600 font-medium leading-tight">
+                  {verificationResult
+                    ? "Registry scan complete."
+                    : "Unsure? Verify this business name against the CAC database."}
+                </p>
+              </div>
 
-            <AnimatePresence mode="wait">
-              {!verificationResult ? (
-                <button
-                  onClick={handleVerify}
-                  disabled={verifying}
-                  className="text-brand font-black text-[10px] uppercase hover:underline disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {verifying && <Loader2 size={12} className="animate-spin" />}
-                  {verifying ? "Searching..." : "Verify Business"}
-                </button>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, x: 5 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex items-center gap-1.5"
-                >
-                  {verificationResult.status === "found" ? (
-                    <>
-                      <CheckCircle size={14} className="text-safe" />
-                      <span className="text-safe font-black text-[10px] uppercase">
-                        Registered ({verificationResult.count})
-                      </span>
-                    </>
+              <div className="flex-shrink-0">
+                <AnimatePresence mode="wait">
+                  {!verificationResult ? (
+                    <motion.button
+                      key="verify-btn"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={handleVerify}
+                      disabled={verifying}
+                      whileTap={{ scale: 0.95 }}
+                      className="bg-brand text-white font-black text-[10px] uppercase px-4 py-2.5 rounded-xl shadow-btn hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-70"
+                    >
+                      {verifying ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" />
+                          Scanning...
+                        </>
+                      ) : (
+                        <>
+                          <Search size={12} strokeWidth={3} />
+                          Verify
+                        </>
+                      )}
+                    </motion.button>
                   ) : (
-                    <>
-                      <XCircle size={14} className="text-danger" />
-                      <span className="text-danger font-black text-[10px] uppercase">
-                        Not Found
-                      </span>
-                    </>
+                    <motion.div
+                      key="result-badge"
+                      initial={{ scale: 0.5, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${
+                        verificationResult.status === "found"
+                          ? "bg-safe/10 border-safe text-safe"
+                          : "bg-danger/10 border-danger text-danger"
+                      }`}
+                    >
+                      {verificationResult.status === "found" ? (
+                        <>
+                          <CheckCircle size={14} strokeWidth={3} />
+                          <span className="font-black text-[10px] uppercase">
+                            Registered ({verificationResult.count})
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle size={14} strokeWidth={3} />
+                          <span className="font-black text-[10px] uppercase">
+                            No Record
+                          </span>
+                        </>
+                      )}
+                    </motion.div>
                   )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </AnimatePresence>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Buttons */}
-      <div className="px-4 pb-4 grid grid-cols-2 gap-3">
+      {/* Action Buttons */}
+      <div className="px-4 pb-5 grid grid-cols-2 gap-3 mt-1">
         <motion.button
-          whileTap={{ scale: 0.95 }}
+          whileTap={{ scale: 0.96 }}
           disabled={disabled}
           onClick={() => onAnswer("scam")}
-          className="py-4 rounded-2xl font-black text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          className="py-4 rounded-2xl font-black text-sm uppercase tracking-wider transition-all disabled:opacity-50"
           style={{
             fontFamily: "Nunito, sans-serif",
             background: "#FDEAEA",
@@ -199,13 +241,13 @@ export default function ScenarioCard({ scenario, onAnswer, disabled }) {
             boxShadow: "0 4px 0 0 #F5AAAA",
           }}
         >
-          🔴 SCAM
+          🚩 Scam
         </motion.button>
         <motion.button
-          whileTap={{ scale: 0.95 }}
+          whileTap={{ scale: 0.96 }}
           disabled={disabled}
           onClick={() => onAnswer("safe")}
-          className="py-4 rounded-2xl font-black text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          className="py-4 rounded-2xl font-black text-sm uppercase tracking-wider transition-all disabled:opacity-50"
           style={{
             fontFamily: "Nunito, sans-serif",
             background: "#E8F5ED",
@@ -214,7 +256,7 @@ export default function ScenarioCard({ scenario, onAnswer, disabled }) {
             boxShadow: "0 4px 0 0 #A3D9B1",
           }}
         >
-          🟢 SAFE
+          ✅ Safe
         </motion.button>
       </div>
     </div>

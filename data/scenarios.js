@@ -1,3 +1,9 @@
+/**
+ * NoBeScam — Master Scenario Registry
+ * Imports all scenario pools and exposes unified helpers
+ * Business filtering is enforced at batch-load time
+ */
+
 import { foodScenarios } from "./scenarios-food";
 import { sportswearScenarios } from "./scenarios-sportswear";
 import { palmWineScenarios } from "./scenarios-palmwine";
@@ -439,6 +445,11 @@ export function getScenariosByBusiness(businessId, level = 1) {
   );
 }
 
+/**
+ * Return a balanced batch (40-60% scam/safe) for a business + level.
+ * Excludes already-used scenario IDs to prevent repeats within a session.
+ * Resets used IDs automatically if pool is nearly exhausted.
+ */
 export function getBalancedBatch(businessId, level, batchSize = 20) {
   let pool = getScenariosByBusiness(businessId, level).filter(
     (s) => !usedIds.has(s.id),

@@ -552,32 +552,7 @@ export default function GamePage() {
             }}
           />
         )}
-        {/* {milestone && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-ink-900/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-bg-surface rounded-[40px] p-10 text-center border-2 border-brand  shadow-lifted max-w-sm"
-            >
-              <div className="text-6xl mb-4">🔓</div>
-              <h2
-                className="text-3xl font-black text-ink-900 mb-2"
-                style={{ fontFamily: "Nunito, sans-serif" }}
-              >
-                {milestone.title}
-              </h2>
-              <p className="text-ink-500 text-sm mb-8 leading-relaxed font-medium">
-                {milestone.sub}
-              </p>
-              <button
-                onClick={() => setMilestone(null)}
-                className="btn-primary w-full py-5 text-lg shadow-btn"
-              >
-                I'M READY →
-              </button>
-            </motion.div>
-          </div>
-        )} */}
+
         {/* Milestone interstitial */}
         {milestone && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-ink-900/60 backdrop-blur-md">
