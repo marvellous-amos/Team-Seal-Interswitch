@@ -1,9 +1,8 @@
 "use client";
-/**
- * ScenarioCard — Fully opaque white card, design-system tokens
- * No dark backgrounds — readable on cream game bg
- */
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Search, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { verifyBusiness } from "../lib/interswitchClient";
 
 const CATEGORY_ICONS = {
   "Customer Message": "👤",
@@ -43,6 +42,27 @@ export default function ScenarioCard({ scenario, onAnswer, disabled }) {
   const style = CATEGORY_STYLE[scenario.category] || CATEGORY_STYLE["Supplier"];
   const icon = CATEGORY_ICONS[scenario.category] || "📩";
   const sender = scenario.sender || getSender(scenario.category);
+
+  const [verifying, setVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState(null);
+
+  async function handleVerify() {
+    if (verifying || !scenario.verificationQuery) return;
+    setVerifying(true);
+
+    // Call the Interswitch Marketplace Proxy
+    const result = await verifyBusiness(scenario.verificationQuery);
+
+    if (result.success && result.companies?.length > 0) {
+      setVerificationResult({
+        status: "found",
+        count: result.companies.length,
+      });
+    } else {
+      setVerificationResult({ status: "not_found" });
+    }
+    setVerifying(false);
+  }
 
   return (
     <div style={{ background: "#FFFFFF" }}>
@@ -95,6 +115,7 @@ export default function ScenarioCard({ scenario, onAnswer, disabled }) {
       {/* Message */}
       <div className="px-4 pb-3">
         <p className="text-ink-900 text-sm leading-relaxed">{scenario.text}</p>
+
         {/* Difficulty */}
         <div className="mt-2 flex items-center gap-1.5">
           <div className="flex gap-0.5">
@@ -113,6 +134,55 @@ export default function ScenarioCard({ scenario, onAnswer, disabled }) {
           </span>
         </div>
       </div>
+
+      {/* Identity Tool Section — Triggered by scenarios with verificationQuery */}
+      {scenario.verificationQuery && (
+        <div className="px-4 pb-4">
+          <div className="bg-bg-sunken border-2 border-ink-100 rounded-xl p-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Search size={14} className="text-ink-400" />
+              <span className="text-[10px] font-black text-ink-500 uppercase tracking-wider">
+                CAC Registry
+              </span>
+            </div>
+
+            <AnimatePresence mode="wait">
+              {!verificationResult ? (
+                <button
+                  onClick={handleVerify}
+                  disabled={verifying}
+                  className="text-brand font-black text-[10px] uppercase hover:underline disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {verifying && <Loader2 size={12} className="animate-spin" />}
+                  {verifying ? "Searching..." : "Verify Business"}
+                </button>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0, x: 5 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center gap-1.5"
+                >
+                  {verificationResult.status === "found" ? (
+                    <>
+                      <CheckCircle size={14} className="text-safe" />
+                      <span className="text-safe font-black text-[10px] uppercase">
+                        Registered ({verificationResult.count})
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle size={14} className="text-danger" />
+                      <span className="text-danger font-black text-[10px] uppercase">
+                        Not Found
+                      </span>
+                    </>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      )}
 
       {/* Buttons */}
       <div className="px-4 pb-4 grid grid-cols-2 gap-3">

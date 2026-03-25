@@ -1,9 +1,3 @@
-/**
- * NoBeScam — Master Scenario Registry
- * Imports all scenario pools and exposes unified helpers
- * Business filtering is enforced at batch-load time
- */
-
 import { foodScenarios } from "./scenarios-food";
 import { sportswearScenarios } from "./scenarios-sportswear";
 import { palmWineScenarios } from "./scenarios-palmwine";
@@ -85,6 +79,7 @@ export const universalScenarios = [
     label: "scam",
     difficulty: 2,
     category: CATEGORIES.GRANT,
+    verificationQuery: "Tony Elumelu Foundation",
     explanation:
       "TEF NEVER charges documentation or processing fees. Recipients are contacted only through tefconnect.com. Any fee request is fraud.",
   },
@@ -95,6 +90,7 @@ export const universalScenarios = [
     label: "safe",
     difficulty: 2,
     category: CATEGORIES.GRANT,
+    verificationQuery: "Neem",
     explanation:
       "The .lagosstate.gov.ng domain is authentic. Government grants always use .gov.ng domains — always cross-check with the official Lagos State website.",
   },
@@ -136,6 +132,7 @@ export const universalScenarios = [
     difficulty: 3,
     category: CATEGORIES.BANK,
     verifiedMerchant: true,
+    verificationQuery: "Neem",
     explanation:
       "GTBank regularly extends overdraft facilities to existing business account holders. The request to visit a branch (not click a link) is the key sign of legitimacy.",
   },
@@ -157,6 +154,7 @@ export const universalScenarios = [
     difficulty: 4,
     category: CATEGORIES.BANK,
     verifiedMerchant: true,
+    verificationQuery: "Neem",
     explanation:
       "NDIC (ndic.org.ng) does handle such claims. Always independently verify by calling NDIC's official number before submitting documents.",
   },
@@ -228,8 +226,174 @@ export const universalScenarios = [
     difficulty: 1,
     category: CATEGORIES.PAYMENT,
     verifiedMerchant: true,
+    verificationQuery: "Neem",
     explanation:
       "Standard Paystack settlement notification. The specific amount and reference number indicate this is a real settlement from your payment processor.",
+  },
+  {
+    id: 21,
+    businesses: ALL,
+    text: "Neem Infotech: Your subscription for 'Cyber-Security Suite' is expiring. Renew at neem.co/billing to keep your business protected.",
+    label: "safe",
+    difficulty: 2,
+    category: CATEGORIES.PAYMENT,
+    verificationQuery: "Neem",
+    explanation:
+      "This is a legitimate service notification from a registered business.",
+  },
+  {
+    id: 22,
+    businesses: ALL,
+    text: "URGENT: Your business permit with 'Neem Logistics' has been flagged for non-compliance. Pay ₦12,500 penalty now to avoid immediate suspension. Pay here: pay.neem-logistics.com",
+    label: "scam",
+    difficulty: 4,
+    category: CATEGORIES.PAYMENT,
+    verificationQuery: "Neem", // Returns "Registered" in Sandbox
+    explanation:
+      "This is a 'Registered Scam.' Even though Neem is a registered entity, legitimate regulatory penalties are never paid via SMS links to private domains.",
+  },
+  {
+    id: 23,
+    businesses: ALL,
+    text: "Customer Complaint: Your recent delivery was damaged. I have opened a dispute. View the photo evidence here: drive-google.com/s/nbs-order-772. Please refund or I report to FCCPC.",
+    label: "scam",
+    difficulty: 5,
+    category: CATEGORIES.CUSTOMER,
+    explanation:
+      "High-pressure social engineering. The 'drive-google.com' link is a phishing site designed to steal your Google/Business login. Real Google links are drive.google.com.",
+  },
+  {
+    id: 24,
+    businesses: ALL,
+    text: "Federal Ministry of Trade: Your MSME is eligible for the 2024 Equipment Subsidy. Check your status with RC Number: 0000001. If matched, apply at trade.gov.ng/subsidy.",
+    label: "safe",
+    difficulty: 3,
+    category: CATEGORIES.GRANT,
+    verificationQuery: "Neem", // Maps to 0000001 in your sandbox test results
+    explanation:
+      "Safe. The message uses a government .gov.ng domain and provides a verifiable RC number for you to cross-check.",
+  },
+  {
+    id: 25,
+    businesses: ALL,
+    text: "Notice from Neem Fashion Enterprise: We are liquidating our warehouse. Buy premium bulk stock at 80% discount. View catalog at neem-fashion-liquidation.ng. Offer ends in 2 hours!",
+    label: "scam",
+    difficulty: 4,
+    category: CATEGORIES.SUPPLIER,
+    verificationQuery: "Neem", // Returns "Registered"
+    explanation:
+      "A 'Registered Scam.' Scammers often hijack the names of real businesses (like Neem Fashion) to run fake liquidation sales. The 2-hour deadline is a classic red flag.",
+  },
+  {
+    id: 26,
+    businesses: ALL,
+    text: "Bank Security Alert: A new device 'iPhone 15' has logged into your mobile banking. If this wasn't you, reply 'STOP' to block this device immediately.",
+    label: "scam",
+    difficulty: 5,
+    category: CATEGORIES.BANK,
+    explanation:
+      "Social Engineering. By replying 'STOP', you confirm your phone number is active and enter a conversation with a scammer who will then ask for your PIN to 'secure' the account.",
+  },
+  {
+    id: 27,
+    businesses: ALL,
+    text: "Your Moniepoint Business Account 1234567890 has been credited with ₦45,000 via Neem Gadgets & more. Transaction Ref: MN-992-CAC.",
+    label: "safe",
+    difficulty: 3,
+    category: CATEGORIES.PAYMENT,
+    verificationQuery: "Neem",
+    explanation:
+      "A standard inbound payment notification. It contains a specific account number and a verifiable sender name.",
+  },
+  {
+    id: 28,
+    businesses: ALL,
+    text: "CAC Compliance: Your company 'Neem' is missing the 2023 Annual Return filing. Avoid a ₦100,000 fine. Log in to the official portal to update: cac-gov-ng.com/annual-returns",
+    label: "scam",
+    difficulty: 5,
+    category: CATEGORIES.GRANT,
+    verificationQuery: "Neem",
+    explanation:
+      "Extreme Difficulty. The link 'cac-gov-ng.com' looks official but uses hyphens to hide that it is not the real 'cac.gov.ng'. Always check the dots!",
+  },
+  {
+    id: 29,
+    businesses: ALL,
+    text: "Hello, this is Bola from your Supplier's office. We changed our Zenith Bank account for the sportswear shipment. Please pay the ₦450,000 to our new UBA Account: 2049XXXXXX. Thank you.",
+    label: "scam",
+    difficulty: 4,
+    category: CATEGORIES.SUPPLIER,
+    explanation:
+      "Invoice Hijacking. Never change payment details based on an SMS. Always call your supplier on a known number to verify bank changes.",
+  },
+  {
+    id: 30,
+    businesses: ALL,
+    text: "Official: Neem Gadgets & more is hiring verified distributors for the South-West region. Apply with your CAC docs at neem.co/distributors for a ₦1M credit line.",
+    label: "safe",
+    difficulty: 4,
+    category: CATEGORIES.SUPPLIER,
+    verificationQuery: "Neem",
+    explanation:
+      "Safe. Neem is a registered entity, and the domain 'neem.co' matches the official company email you saw in the CAC registry.",
+  },
+  {
+    id: 31,
+    businesses: ALL,
+    text: "Congratulations! Your business was selected for a Google Ads Credit of ₦150,000. Activate your credit by signing in with your Business Profile: ads-google-nigeria.ng",
+    label: "scam",
+    difficulty: 3,
+    category: CATEGORIES.GRANT,
+    explanation:
+      "Phishing. Google uses google.com or business.google.com. They do not use .ng country domains for their core login services.",
+  },
+  {
+    id: 32,
+    businesses: ALL,
+    text: "URGENT: Your registration with the 'Nigeria Small Business Council' is incomplete. Pay ₦3,000 for your certificate to avoid a ₦20,000 late fee.",
+    label: "scam",
+    difficulty: 1,
+    category: CATEGORIES.GRANT,
+    // Will return "Not Found" in Sandbox
+    verificationQuery: "Nigeria Small Business Council",
+    explanation:
+      "Scammers use official-sounding names. Since this isn't a registered entity, the payment request is a huge red flag.",
+  },
+  {
+    id: 33,
+    businesses: ALL,
+    text: "Neem Logistics: We have received your package from the supplier. Pay the delivery fee of ₦2,500 directly via the official portal at neem.co/ship.",
+    label: "safe",
+    difficulty: 1,
+    category: CATEGORIES.SUPPLIER,
+    // Triggers "Registered (3)" badge in Sandbox
+    verificationQuery: "Neem",
+    explanation:
+      "This is a safe message from a registered business. The link matches the official company domain found in your search results.",
+  },
+  {
+    id: 34,
+    businesses: ALL,
+    text: "CONGRATS! You are the winner of the 'Lagos Merchant Raffle' ₦100,000 prize. Send your shop name and RC Number to claim your reward.",
+    label: "scam",
+    difficulty: 2,
+    category: CATEGORIES.PAYMENT,
+    // Will return "Not Found"
+    verificationQuery: "Lagos Merchant Raffle",
+    explanation:
+      "Random raffles for business owners are common phishing tactics. If the raffle 'organizer' isn't registered, it's a scam.",
+  },
+  {
+    id: 35,
+    businesses: ALL,
+    text: "Official: Neem Gadgets & more has confirmed your wholesale order #NBS-991. Track your delivery at neem.co/track. Thank you for your business!",
+    label: "safe",
+    difficulty: 2,
+    category: CATEGORIES.SUPPLIER,
+    // Triggers successful verification in Sandbox
+    verificationQuery: "Neem",
+    explanation:
+      "Order confirmations from registered businesses that provide tracking links on their own domain are generally safe.",
   },
 ];
 
@@ -275,11 +439,6 @@ export function getScenariosByBusiness(businessId, level = 1) {
   );
 }
 
-/**
- * Return a balanced batch (40-60% scam/safe) for a business + level.
- * Excludes already-used scenario IDs to prevent repeats within a session.
- * Resets used IDs automatically if pool is nearly exhausted.
- */
 export function getBalancedBatch(businessId, level, batchSize = 20) {
   let pool = getScenariosByBusiness(businessId, level).filter(
     (s) => !usedIds.has(s.id),
